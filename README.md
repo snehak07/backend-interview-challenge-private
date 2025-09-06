@@ -96,3 +96,50 @@ This challenge is designed to take 2-3 hours to complete.
 ## License
 
 This project is for interview purposes only.
+
+
+---
+
+## 📌 Candidate Implementation Notes (Sneha K)
+
+### 🚀 How to Run the Project
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/snehak07/backend-interview-challenge-private.git
+   cd backend-interview-challenge
+
+2. Install dependencies:
+npm install
+
+3. Copy the environment variables:
+cp .env.example .env
+
+4. Start the application:
+npm run dev
+ 
+📂 Branch
+
+Development work is on the dev branch.
+
+🗄️ Database
+
+SQLite database (./data/tasks.sqlite3) is used.
+
+🔗 API Endpoints
+
+GET /api/tasks → Fetch all tasks
+
+GET /api/tasks/:id → Fetch single task
+
+POST /api/tasks → Create a new task
+
+PUT /api/tasks/:id → Update a task
+
+DELETE /api/tasks/:id → Delete a task
+
+POST /api/sync → Trigger sync
+
+GET /api/status → Get sync status
+
+GET /api/health → Health check
+
