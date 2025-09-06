@@ -17,7 +17,7 @@ app.use(express.json());
 
 // initialize DB
 const db = new Database(process.env.DATABASE_URL || './data/tasks.sqlite3');
-
+//
 // routes (pass db)
 app.use('/api/tasks', createTaskRouter(db));
 app.use('/api', createSyncRouter(db));
