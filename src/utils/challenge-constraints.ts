@@ -1,6 +1,6 @@
 /**
  * CHALLENGE CONSTRAINTS
- * 
+ *
  * These constraints are specific to our implementation and must be followed.
  * Generic AI solutions won't account for these requirements.
  */
@@ -19,9 +19,9 @@ export const CHALLENGE_CONSTRAINTS = {
    * if timestamps are equal.
    */
   CONFLICT_PRIORITY: {
-    'delete': 3,
-    'update': 2,
-    'create': 1,
+    delete: 3,
+    update: 2,
+    create: 1,
   },
 
   /**

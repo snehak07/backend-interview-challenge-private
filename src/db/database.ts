@@ -1,8 +1,19 @@
 import sqlite3 from 'sqlite3';
-// no unused imports here; database helper doesn't need them
-
 
 const sqlite = sqlite3.verbose();
+
+export interface Task {
+  id: string;
+  title: string;
+  description?: string;
+  completed: number;
+  created_at?: string;
+  updated_at?: string;
+  is_deleted?: number;
+  sync_status?: string;
+  server_id?: string;
+  last_synced_at?: string;
+}
 
 export class Database {
   private db: sqlite3.Database;
@@ -48,29 +59,31 @@ export class Database {
     await this.run(createSyncQueueTable);
   }
 
-  // Helper methods
-  run(sql: string, params: any[] = []): Promise<void> {
+  run(sql: string, params: unknown[] = []): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.db.run(sql, params, (err) => {
-        if (err) reject(err);
+      this.db.run(sql, params, (err: unknown) => {
+        if (err) reject(err as Error);
         else resolve();
       });
     });
   }
 
-  get(sql: string, params: any[] = []): Promise<any> {
+  get<T = unknown>(
+    sql: string,
+    params: unknown[] = [],
+  ): Promise<T | undefined> {
     return new Promise((resolve, reject) => {
-      this.db.get(sql, params, (err, row) => {
-        if (err) reject(err);
+      this.db.get(sql, params, (err: unknown, row?: T) => {
+        if (err) reject(err as Error);
         else resolve(row);
       });
     });
   }
 
-  all(sql: string, params: any[] = []): Promise<any[]> {
+  all<T = unknown>(sql: string, params: unknown[] = []): Promise<T[]> {
     return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
+      this.db.all(sql, params, (err: unknown, rows: T[]) => {
+        if (err) reject(err as Error);
         else resolve(rows);
       });
     });
@@ -78,8 +91,8 @@ export class Database {
 
   close(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.db.close((err) => {
-        if (err) reject(err);
+      this.db.close((err: unknown) => {
+        if (err) reject(err as Error);
         else resolve();
       });
     });
