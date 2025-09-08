@@ -34,7 +34,14 @@ export function createSyncRouter(db: Database) {
 
   router.post(
     '/batch',
-    async (req: Request<{}, {}, BatchSyncRequest>, res: Response) => {
+    async (
+      req: Request<
+        Record<string, never>,
+        Record<string, never>,
+        BatchSyncRequest
+      >,
+      res: Response,
+    ) => {
       try {
         const body = req.body;
         const result = await syncService.processBatch(body);

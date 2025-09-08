@@ -22,6 +22,15 @@ const db = new Database(process.env.DATABASE_URL || './data/tasks.sqlite3');
 app.use('/api/tasks', createTaskRouter(db));
 app.use('/api', createSyncRouter(db));
 
+// 404 for unknown routes (JSON error shape)
+app.use((req, res) => {
+  return res.status(404).json({
+    error: 'Not Found',
+    timestamp: new Date().toISOString(),
+    path: `${req.baseUrl}${req.path}`,
+  });
+});
+
 // error handler
 app.use(errorHandler);
 

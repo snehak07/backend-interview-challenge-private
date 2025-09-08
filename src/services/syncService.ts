@@ -23,6 +23,7 @@ type IncomingItem = {
   completed?: boolean;
   created_at?: string;
   updated_at?: string;
+  operation?: 'create' | 'update' | 'delete' | string;
 };
 
 type ProcessedItem = {
@@ -31,6 +32,19 @@ type ProcessedItem = {
   task_id?: string | null;
   status: 'success' | 'error';
   resolved_data: Partial<Task>;
+  operation?: 'create' | 'update' | 'delete' | string;
+  conflict?: boolean;
+};
+
+type ServerTaskRow = {
+  id: string;
+  client_id: string;
+  title: string;
+  description: string | null;
+  completed: number; // 0/1
+  is_deleted: number; // 0/1
+  created_at: string;
+  updated_at: string;
 };
 
 export class SyncService {
@@ -165,6 +179,16 @@ export class SyncService {
           ]);
 
           result.synced_items += 1;
+
+          // Surface conflict information even on success
+          if (p.conflict) {
+            result.errors.push({
+              task_id: clientId,
+              operation: (p.operation as string) || 'update',
+              error: 'Conflict resolved using last-write-wins',
+              timestamp: nowISO(),
+            });
+          }
         } else {
           result.failed_items += 1;
           result.errors.push({
@@ -211,7 +235,7 @@ export class SyncService {
     }
   }
 
-  /** Mocked batch processor (for local/demo) */
+  /** Realistic batch processor storing items in server_tasks with last-write-wins */
   async processBatch(reqBody: {
     items?: IncomingItem[];
     client_timestamp?: string;
@@ -219,24 +243,142 @@ export class SyncService {
     const processed_items: ProcessedItem[] = [];
 
     for (const it of reqBody.items || []) {
-      const clientId = it.task_id ?? it.client_id ?? it.data?.id ?? null;
-      const serverId = `srv_${uuidv4().slice(0, 8)}`;
+      const clientId: string | null =
+        it.task_id ??
+        it.client_id ??
+        (it.data?.id as string | undefined) ??
+        null;
+      const op: string = it.operation || 'update';
 
-      const resolved_data: Partial<Task> = {
-        id: serverId,
-        title: it.data?.title ?? it.title ?? 'untitled',
-        description: it.data?.description ?? null,
-        completed: !!it.data?.completed,
+      // Normalize incoming payload
+      const incoming: Required<Pick<Task, 'title'>> & Partial<Task> = {
+        title: (it.data?.title ?? it.title ?? 'untitled') as string,
+        description: (it.data?.description ?? null) as string | null,
+        completed: !!(it.data?.completed ?? false),
         created_at: it.data?.created_at ?? nowISO(),
         updated_at: it.data?.updated_at ?? nowISO(),
       };
 
-      processed_items.push({
-        client_id: clientId,
-        server_id: serverId,
-        status: 'success',
-        resolved_data,
-      });
+      // Fetch existing server record by client_id
+      const existing = await this.db.get<ServerTaskRow>(
+        `SELECT * FROM server_tasks WHERE client_id = ?`,
+        [clientId],
+      );
+
+      // Helper to coerce boolean -> integer for DB
+      const toInt = (b: boolean | number | undefined) => (b ? 1 : 0);
+
+      let serverId: string;
+
+      try {
+        const incomingUpdatedAt = incoming.updated_at ?? nowISO();
+        if (op === 'delete') {
+          // Mark as deleted server-side (soft delete)
+          if (existing) {
+            await this.db.run(
+              `UPDATE server_tasks SET is_deleted = 1, updated_at = ? WHERE id = ?`,
+              [incomingUpdatedAt, existing.id],
+            );
+            serverId = existing.id;
+          } else {
+            // Create a tombstone so future updates know it was deleted server-side
+            serverId = `srv_${uuidv4().slice(0, 8)}`;
+            await this.db.run(
+              `INSERT INTO server_tasks (id, client_id, title, description, completed, is_deleted, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+              [
+                serverId,
+                clientId,
+                incoming.title,
+                incoming.description ?? null,
+                toInt(incoming.completed ?? false),
+                incoming.created_at ?? incomingUpdatedAt,
+                incomingUpdatedAt,
+              ],
+            );
+          }
+        } else if (!existing) {
+          // Create new server record
+          serverId = `srv_${uuidv4().slice(0, 8)}`;
+          await this.db.run(
+            `INSERT INTO server_tasks (id, client_id, title, description, completed, is_deleted, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
+            [
+              serverId,
+              clientId,
+              incoming.title,
+              incoming.description ?? null,
+              toInt(incoming.completed ?? false),
+              incoming.created_at ?? incomingUpdatedAt,
+              incomingUpdatedAt,
+            ],
+          );
+        } else {
+          // Update with last-write-wins: only apply if incoming.updated_at is newer
+          const isNewer =
+            !existing.updated_at || incomingUpdatedAt >= existing.updated_at;
+          serverId = existing.id;
+          if (isNewer) {
+            await this.db.run(
+              `UPDATE server_tasks
+               SET title = ?, description = ?, completed = ?, is_deleted = 0, updated_at = ?
+               WHERE id = ?`,
+              [
+                incoming.title,
+                incoming.description ?? null,
+                toInt(incoming.completed ?? false),
+                incomingUpdatedAt,
+                existing.id,
+              ],
+            );
+          }
+        }
+
+        // Return resolved_data reflecting server state after operation
+        const serverRow = await this.db.get<ServerTaskRow>(
+          `SELECT * FROM server_tasks WHERE client_id = ?`,
+          [clientId],
+        );
+
+        // Determine conflict: when an existing row existed and incoming was older
+        const conflict =
+          !!existing && !!serverRow && incomingUpdatedAt < serverRow.updated_at;
+
+        const resolved: Partial<Task> = serverRow
+          ? {
+              id: serverRow.id,
+              title: serverRow.title,
+              description: serverRow.description ?? null,
+              completed: Boolean(Number(serverRow.completed ?? 0)),
+              created_at: serverRow.created_at,
+              updated_at: serverRow.updated_at,
+            }
+          : {
+              id: serverId!,
+              title: incoming.title,
+              description: incoming.description ?? null,
+              completed: Boolean(incoming.completed),
+              created_at: incoming.created_at,
+              updated_at: incoming.updated_at,
+            };
+
+        processed_items.push({
+          client_id: clientId ?? null,
+          server_id: (serverRow?.id ?? serverId) as string,
+          status: 'success',
+          resolved_data: resolved,
+          operation: op as 'create' | 'update' | 'delete',
+          conflict,
+        });
+      } catch {
+        processed_items.push({
+          client_id: clientId ?? null,
+          server_id: '' as unknown as string,
+          status: 'error',
+          resolved_data: {},
+          operation: op as 'create' | 'update' | 'delete',
+        });
+      }
     }
 
     return { processed_items };

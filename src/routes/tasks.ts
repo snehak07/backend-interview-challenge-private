@@ -25,11 +25,24 @@ export function createTaskRouter(db: Database) {
     try {
       const { id } = req.params;
       const task = await taskService.getTaskById(id);
-      if (!task) return res.status(404).json({ error: 'Task not found' });
+      if (!task)
+        return res.status(404).json({
+          error: 'Task not found',
+          timestamp: new Date().toISOString(),
+          path: `${req.baseUrl}${req.path}`,
+        });
       return res.json(task);
     } catch (err) {
-      if (err instanceof Error)
+      if (err instanceof Error) {
+        if (err.message === 'Task not found') {
+          return res.status(404).json({
+            error: 'Task not found',
+            timestamp: new Date().toISOString(),
+            path: `${req.baseUrl}${req.path}`,
+          });
+        }
         return res.status(500).json({ error: err.message });
+      }
       return res.status(500).json({ error: 'Unknown error' });
     }
   });

@@ -41,8 +41,8 @@ function rowToTask(row: unknown): Task {
         ? r.is_deleted
         : !!Number(r.is_deleted ?? 0),
     sync_status: r.sync_status ?? 'pending',
-    server_id: r.server_id ?? undefined,
-    last_synced_at: r.last_synced_at ?? undefined,
+    server_id: r.server_id ?? null,
+    last_synced_at: r.last_synced_at ?? null,
   };
 }
 

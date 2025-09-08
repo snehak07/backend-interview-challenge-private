@@ -55,8 +55,24 @@ export class Database {
       )
     `;
 
+    // Server-side storage to simulate a real backend for batch processing
+    // Keeps mapping from client_id -> server task along with last-write-wins timestamps
+    const createServerTasksTable = `
+      CREATE TABLE IF NOT EXISTS server_tasks (
+        id TEXT PRIMARY KEY,                 -- server-assigned id (srv_*)
+        client_id TEXT UNIQUE,               -- client/local id
+        title TEXT NOT NULL,
+        description TEXT,
+        completed INTEGER DEFAULT 0,
+        is_deleted INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
     await this.run(createTasksTable);
     await this.run(createSyncQueueTable);
+    await this.run(createServerTasksTable);
   }
 
   run(sql: string, params: unknown[] = []): Promise<void> {
