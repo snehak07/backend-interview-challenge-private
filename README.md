@@ -166,6 +166,10 @@ npm run test:coverage
 # Run tests with UI
 npm run test:ui
 ```
+- `npm run lint`
+  
+- `npm run typecheck` 
+
 
 ### Test Coverage
 - **TaskService Tests**: CRUD operations, sync queue management
